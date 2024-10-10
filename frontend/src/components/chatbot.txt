@@ -1,0 +1,216 @@
+<template>
+  <div class="chatbot-container">
+    <div v-if="isOpen" class="chatbot-box flex flex-col">
+      <div class="chatbot-header">
+        <span>Chatbot</span>
+        <button @click="toggleChatbot" class="text-black">X</button>
+      </div>
+      <div class="chatbot-content flex-1 overflow-y-auto p-4" ref="chatContent">
+        <div v-for="(message, index) in messages" :key="index" :class="{'text-right': message.fromUser, 'text-left': !message.fromUser}">
+          <div class="inline-block p-2 rounded-lg" :class="{'bg-blue-500 text-white': message.fromUser, 'bg-white text-black': !message.fromUser}">
+            {{ message.text }}
+          </div>
+        </div>
+      </div>
+      <div class="chatbot-input flex p-2 border-t border-gray-200">
+        <input v-model="userMessage" @keyup.enter="sendMessage" placeholder="Tapez votre message..." class="flex-grow p-2 border border-gray-300 rounded-lg" />
+      </div>
+    </div>
+    <div v-else class="chatbot-icon" @click="toggleChatbot">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="icon icon-tabler icon-tabler-message-circle"
+        width="44"
+        height="44"
+        viewBox="0 0 24 24"
+        stroke-width="1.5"
+        stroke="#ffffff"
+        fill="none"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+        <path
+          d="M3 20c0 .554 .225 1.055 .586 1.414c.365 .364 .878 .586 1.414 .586h13a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-13a2 2 0 0 0 -2 2v12z"
+        />
+        <path d="M8 10h8m-8 4h4" />
+      </svg>
+    </div>
+  </div>
+</template>
+
+<script>
+export default {
+  data() {
+    return {
+      isOpen: false,
+      userMessage: '',
+      messages: [] // Structure modifiée pour inclure l'origine du message
+    };
+  },
+  methods: {
+    toggleChatbot() {
+  this.isOpen = !this.isOpen;
+  const container = this.$refs.chatContent;
+  container.classList.toggle('closed');
+  this.$nextTick(() => {
+    this.scrollToBottom();
+  });
+},
+    sendMessage() {
+      if (this.userMessage.trim() !== '') {
+        // Ajouter le message de l'utilisateur à la liste des messages
+        this.messages.push({ text: this.userMessage, fromUser: true });
+
+        // Envoyer la requête au serveur Flask
+        fetch('http://localhost:5000/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: this.userMessage }),
+        })
+          .then(response => response.json())
+          .then(data => {
+            // Ajouter la réponse du bot à la liste des messages
+            this.messages.push({ text: data.response, fromUser: false });
+            this.$nextTick(() => {
+              this.scrollToBottom();
+            });
+          })
+          .catch(error => {
+            console.error('Erreur:', error);
+          });
+
+        // Réinitialiser le champ de saisie
+        this.userMessage = '';
+        this.$nextTick(() => {
+          this.scrollToBottom();
+        });
+      }
+    },
+    scrollToBottom() {
+      const chatContent = this.$refs.chatContent;
+      chatContent.scrollTop = chatContent.scrollHeight;
+    }
+  }
+};
+</script>
+
+<style scoped>
+.chatbot-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.chatbot-icon {
+    width: 50px;
+    height: 50px;
+    background-color: #ff6f61; /* Change to a lighter red color */
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Add shadow for depth */
+    position: fixed;
+    bottom: 30px; /* Adjust position */
+    right: 30px; /* Adjust position */
+}
+
+
+.chatbot-box {
+  width: 320px; /* Slightly wider */
+  height: 500px; /* Slightly taller */
+  background-color: #ffffff; /* White background */
+  border-radius: 15px; /* More rounded corners */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); /* Stronger shadow */
+  display: flex;
+  flex-direction: column;
+}
+
+
+.chatbot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px; /* Increase padding */
+  background-color: #ff6f61; /* Lighter red */
+  color: white;
+  border-radius: 15px 15px 0 0; /* More rounded corners */
+  font-weight: bold; /* Make text bold */
+  font-size: 16px; /* Increase font size */
+}
+
+
+.chatbot-content {
+  flex-grow: 1;
+  padding: 15px; /* Increase padding for better spacing */
+  overflow-y: auto;
+}
+
+.chatbot-input {
+  display: flex;
+  padding: 10px 15px; /* More padding for spacing */
+  border-top: 1px solid #ddd;
+  background-color: #f9f9f9; /* Light grey background */
+}
+
+.chatbot-input input {
+  flex-grow: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 20px; /* Fully rounded input */
+  outline: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Light shadow for depth */
+}
+
+
+.chatbot-content .text-right .inline-block {
+  background-color: #ff6f61; /* Match the accent color */
+  color: white;
+  border-radius: 20px; /* Fully rounded corners */
+  padding: 10px 15px; /* Better padding for text */
+  margin-bottom: 10px;
+}
+
+.chatbot-content .text-left .inline-block {
+  background-color: #f1f1f1; /* Light grey for bot messages */
+  color: black;
+  border-radius: 20px;
+  padding: 10px 15px;
+  margin-bottom: 10px;
+}
+
+.chatbot-box {
+  transition: all 0.3s ease-in-out;
+}
+
+.chatbot-container {
+  transition: opacity 0.3s ease-in-out;
+}
+
+.chatbot-container.closed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+
+@media only screen and (max-width: 600px) {
+  .chatbot-box {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+  .chatbot-icon {
+    width: 40px;
+    height: 40px;
+    bottom: 20px;
+    right: 20px;
+  }
+}
+
+</style>

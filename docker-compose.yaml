@@ -1,0 +1,53 @@
+services:
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: DockerFile
+    environment:
+      - DB_HOST=neo4j
+      - DB_PORT=7687
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/backend
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: DockerFile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/frontend
+      - /frontend/node_modules
+    networks:
+      - app-network
+    environment:
+      - NODE_ENV=development
+
+  neo4j:
+    image: neo4j:latest
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER}/${NEO4J_PASS}
+    ports:
+      - "7474:7474"  # Port HTTP pour accéder à l'interface web de Neo4j
+      - "7473:7473"  # Port HTTPS pour accès sécurisé à l'interface web
+      - "7687:7687"  # Port Bolt pour les connexions avec le driver Neo4j
+    volumes:
+      - neo4j-data:/data
+    networks:
+      - app-network
+
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  neo4j-data:
+    driver: local
