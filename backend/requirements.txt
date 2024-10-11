@@ -8,5 +8,5 @@ Flask
 requests
 neo4j
 jsonify
-
+pillow
 
