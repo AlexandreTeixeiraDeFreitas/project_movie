@@ -9,6 +9,7 @@ Créer un .env avec
 
 NEO4J_USER=neo4j
 NEO4J_PASS=123456789
+NEO4J_URI=bolt://localhost:7687
 
 docker-compose up --build
 
