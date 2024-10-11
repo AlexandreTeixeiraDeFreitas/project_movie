@@ -1,149 +1,159 @@
-import mysql.connector
-import matplotlib.pyplot as plt
-import seaborn as sns
-import io, os, bcrypt
-from flask import Flask, jsonify, request, redirect, url_for
+import os
+import requests
+from PIL import Image
+from io import BytesIO
+from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required
-import requests
+from neo4j import GraphDatabase
+from Neo4jClient import Neo4jClient
 
-# il faudrait un chatbot avec l'onglet aide, et un chat bot qui pose des questions et redirige vers un interlocuteur en ligne en direct
-# https://www.twilio.com/en-us/whatsapp/pricing
-
-load_dotenv('.env.local')
+# Charger les variables d'environnement
+load_dotenv('.env')
 
 app = Flask(__name__)
 CORS(app)
 
-# Configurations sécurisées
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'super-secret')
-
-jwt = JWTManager(app)
-
-config = {
-    'user': os.getenv('DB_USER', 'default_user'),
-    'password': os.getenv('DB_PASSWORD', 'default_password'),
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'database': os.getenv('DB_NAME', 'default_db_name'),
-    'raise_on_warnings': True,
-    'port': int(os.getenv('DB_PORT', 3306))
+# Configuration pour la connexion à Neo4j
+neo4j_config = {
+    'uri': os.getenv('NEO4J_URI'),
+    'user': os.getenv('NEO4J_USER'),
+    'password': os.getenv('NEO4J_PASS')
 }
 
-def query_db(query, args=(), one=False):
-    cnx = mysql.connector.connect(**config)
-    cursor = cnx.cursor(dictionary=True)
-    cursor.execute(query, args)
-    rv = cursor.fetchall()
-    cursor.close()
-    cnx.close()
-    return (rv[0] if rv else None) if one else rv
+# URL d'authentification MovieLens et données d'authentification
+auth_url = "https://movielens.org/api/sessions"
+auth_data = {
+    "userName": "atf202",
+    "password": "Bouboule12345"
+}
 
-@app.route('/')
-def home():
-    return jsonify({"message": "Welcome to the home page!"})
+# Créer une session pour gérer les cookies
+session = requests.Session()
 
-@app.route('/login', methods=['POST'])
-def login():
-    username = request.json.get('username', None)
-    password = request.json.get('password', None)
-    user = query_db("SELECT * FROM users WHERE username=%s", (username,), one=True)
+# Authentification à l'API MovieLens
+response = session.post(auth_url, json=auth_data)
 
-    if user:
-        print(f"User found: {user}")  # Débogage : vérifier l'utilisateur trouvé
+# Créer un driver pour la connexion à Neo4j
+driver = GraphDatabase.driver(
+    neo4j_config['uri'],
+    auth=(neo4j_config['user'], neo4j_config['password'])
+)
 
-        # Vérifier si le mot de passe correspond
-        if bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
-            access_token = create_access_token(identity=username)
-            print(f"Access token created: {access_token}")  # Débogage : vérifier la création du token
-            return jsonify(access_token=access_token)
+# Créer une instance de Neo4jClient avec le driver
+neo4j_client = Neo4jClient(driver)
+
+# Fonction pour obtenir l'image du poster d'un film
+def get_poster_image(movie_id):
+    if response.status_code == 200:
+        # URL pour récupérer les informations sur un film
+        movie_url = f"https://movielens.org/api/movies/{movie_id}"
+
+        # Effectuer l'appel GET pour récupérer les informations du film
+        movie_response = session.get(movie_url)
+
+        if movie_response.status_code == 200:
+            movie_info = movie_response.json()
+            # Récupérer le chemin du poster (posterPath)
+            poster_path = movie_info["data"]["movieDetails"]["movie"].get("posterPath", None)
+
+            if poster_path:
+                # Construire l'URL complète de l'image
+                poster_url = f"https://image.tmdb.org/t/p/original{poster_path}"
+
+                # Télécharger l'image
+                image_response = requests.get(poster_url)
+                
+                # Ouvrir l'image à partir du contenu téléchargé
+                img = Image.open(BytesIO(image_response.content))
+                
+                # Sauvegarder temporairement l'image pour l'envoyer avec Flask
+                temp_image_path = "temp_poster.jpg"
+                img.save(temp_image_path)
+
+                return temp_image_path
+            else:
+                return None
         else:
-            print("Password does not match")  # Débogage : mot de passe incorrect
-            return jsonify({"error": "Palavra passe incorrecta."}), 401
+            return None
     else:
-        print("User not found")  # Débogage : utilisateur non trouvé
-        return jsonify({"error": "nome de utilizador incorrecto"}), 401
+        return None
 
-import requests
+# Route pour servir l'image du poster
+@app.route('/poster/<int:movie_id>', methods=['GET'])
+def get_movie_poster(movie_id):
+    image_path = get_poster_image(movie_id)
 
-@app.route('/chat', methods=['POST'])
-def chat():
-    message = request.json.get('message', None)
-    if not message:
-        return jsonify({"error": "Message not provided"}), 400
-
-    # Envoyer le message à Wit.ai
-    access_token = os.getenv('WIT_AI_ACCESS_TOKEN')
-
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
-    response = requests.get(f'https://api.wit.ai/message?v=20240823&q={message}', headers=headers)
-    data = response.json()
-
-    # Détecter l'intention
-    intent = data.get('intents', [{}])[0].get('name')
-
-    # Réponse basée sur l'intention
-    if intent == 'greet':
-        reply = "Bom dia! Como posso ajudar?"
+    if image_path:
+        return send_file(image_path, mimetype='image/jpeg')
     else:
-        # Si l'intention est inconnue, on l'enregistre dans la base de données
-        cnx = mysql.connector.connect(**config)
-        cursor = cnx.cursor()
-        
-        # Vérifier si l'intent existe déjà dans la table
-        existing_intent = query_db("SELECT * FROM intent WHERE nom=%s", (intent,), one=True)
-        if not existing_intent:
-            cursor.execute("INSERT INTO intent (nom, response, unknown) VALUES (%s, %s, %s)",
-                           (intent, None, True))
-            cnx.commit()
+        return jsonify({"error": "Poster not found"}), 404
 
-        cursor.close()
-        cnx.close()
+# Route pour récupérer tous les films avec filtres (titre, genre, tag)
+@app.route('/films', methods=['GET'])
+def list_films():
+    search_term = request.args.get('search_term', '')
+    selected_genre = request.args.get('genres', '')
+    selected_tag = request.args.get('tag', '')
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 25))
 
-        reply = "Desculpe, não entendi."
+    if search_term:
+        films = neo4j_client.search_movies_by_title(search_term, page, page_size)
+    elif selected_genre:
+        films = neo4j_client.get_movies_by_genres([selected_genre], page, page_size)
+    elif selected_tag:
+        films = neo4j_client.get_movies_by_tag(selected_tag, page, page_size)
+    else:
+        films = neo4j_client.get_movies_with_tags_and_avg_rating(page, page_size)
 
-    return jsonify({"response": reply})
+    return jsonify(films)
 
+# Route pour les détails d'un film spécifique avec pagination
+@app.route('/filmdetails', methods=['GET'])
+def film_details():
+    movie_id = int(request.args.get('movie_id', 1))
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 25))
 
-    
-@app.route('/register', methods=['POST'])
-def signup():
-    username = request.json.get('username', None)
-    password = request.json.get('password', None)
+    movie_info = neo4j_client.get_movie_info(movie_id, page, page_size)
 
-    # Vérifier si l'utilisateur existe déjà
-    existing_user = query_db("SELECT * FROM users WHERE username=%s", (username,), one=True)
-    if existing_user:
-        return jsonify({"error": "User already exists"}), 400
+    if movie_info:
+        return jsonify(movie_info)
+    else:
+        return jsonify({"message": "Movie not found"}), 404
 
-    # Hasher le mot de passe
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+# Route pour rechercher des films par titre
+@app.route('/searchmovies', methods=['GET'])
+def search_movies():
+    search_term = request.args.get('search_term', '')
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 25))
 
-    # Insérer le nouvel utilisateur dans la base de données
-    cnx = mysql.connector.connect(**config)
-    cursor = cnx.cursor()
-    cursor.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
-    cnx.commit()
-    cursor.close()
-    cnx.close()
+    movies = neo4j_client.search_movies_by_title(search_term, page, page_size)
+    return jsonify(movies)
 
-    return jsonify({"message": "User created successfully"}), 201
+# Route pour récupérer les films par tag spécifique avec pagination
+@app.route('/moviesbytag', methods=['GET'])
+def movies_by_tag():
+    tag = request.args.get('tag', '')
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 25))
 
-@app.route('/protected', methods=['GET'])
-@jwt_required()
-def protected():
-    return jsonify({"message": "You are viewing a protected route!"})
+    movies = neo4j_client.get_movies_by_tag(tag, page, page_size)
+    return jsonify(movies)
 
-@app.errorhandler(404)
-def page_not_found(e):
-    # Rediriger vers une page d'erreur 404 personnalisée
-    return redirect(url_for('error_404'))
+# Route pour récupérer les genres distincts
+@app.route('/genres', methods=['GET'])
+def get_genres():
+    genres = neo4j_client.get_distinct_genres()
+    return jsonify(genres)
 
-@app.route('/error404')
-def error_404():
-    return jsonify({"error": "Page not found"}), 404
+# Route pour récupérer tous les tags distincts
+@app.route('/tags', methods=['GET'])
+def get_tags():
+    tags = neo4j_client.get_distinct_tags()
+    return jsonify(tags)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
