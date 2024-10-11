@@ -40,9 +40,9 @@ services:
       - "7687:7687"  # Port Bolt pour les connexions avec le driver Neo4j
     volumes:
       - neo4j-data:/data
+      - C:/xampp/htdocs/project_movie/datacsv:/var/lib/neo4j/import
     networks:
       - app-network
-
 
 networks:
   app-network:
@@ -51,3 +51,4 @@ networks:
 volumes:
   neo4j-data:
     driver: local
+  
