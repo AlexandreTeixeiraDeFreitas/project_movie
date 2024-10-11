@@ -1,4 +1,4 @@
-Voici une version améliorée de ton README pour améliorer la clarté et la compréhension :
+Voici le README mis à jour avec l'ajout de l'étape concernant le script `project_import.py` :
 
 ---
 
@@ -36,7 +36,15 @@ Avant de lancer le projet avec Docker, vous devez modifier une ligne dans le fic
 
 ⚠️ **Important :** Assurez-vous de conserver les deux-points `:` dans la syntaxe.
 
-### Étape 3 : Lancer le projet
+### Étape 3 : Importation des données dans Neo4j
+
+Exécutez le script `project_import.py` pour remplir la base de données Neo4j avec les données issues des fichiers CSV. Ce processus prend entre 3 et 6 minutes.
+
+```bash
+python project_import.py
+```
+
+### Étape 4 : Lancer le projet
 
 Lancez le projet avec Docker en utilisant la commande suivante :
 ```bash
@@ -50,4 +58,4 @@ docker-compose up --build
 
 ---
 
-Cette version clarifie les étapes et utilise un formatage qui rend le processus plus facile à suivre.
+Cette version inclut l'étape pour exécuter le script d'importation des données, ce qui rend le guide plus complet et précis.
