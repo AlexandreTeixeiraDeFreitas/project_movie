@@ -4,6 +4,10 @@ Voici le README mis à jour avec l'ajout de l'étape concernant le script `proje
 
 # Project Movie
 
+## DATA SET
+https://grouplens.org/datasets/movielens/latest/
+Le small
+
 ## Lancer le projet avec Docker Desktop
 
 ### Étape 1 : Configuration du back-end
